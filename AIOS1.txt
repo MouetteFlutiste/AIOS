@@ -1,0 +1,272 @@
+//@version=6
+indicator(title = 'AIOS', shorttitle = 'AIOS', overlay = true, timeframe = '', timeframe_gaps = true, max_lines_count = 500, max_labels_count = 500, max_bars_back=500)
+
+///////////////////////////////////////////////
+// Enable/Disable settings
+///////////////////////////////////////////////
+
+show_keltner = input.bool(true, 'Show Keltner Channels', group = 'Visibility')
+show_nadaraya = input.bool(true, 'Show Nadaraya-Watson', group = 'Visibility')
+show_emas = input.bool(true, 'Show Naked EMAs', group = 'Visibility')
+show_ichimoku = input.bool(true, 'Show Ichimoku Cloud', group = 'Visibility')
+
+///////////////////////////////////////////////
+// ====== Ichimoku Cloud Settings ======
+///////////////////////////////////////////////
+
+conversionPeriods = input.int(9, minval=1, title="Conversion Line Length", group = 'Ichimoku Settings')
+basePeriods = input.int(26, minval=1, title="Base Line Length", group = 'Ichimoku Settings')
+laggingSpan2Periods = input.int(52, minval=1, title="Leading Span B Length", group = 'Ichimoku Settings')
+displacement = input.int(26, minval=1, title="Lagging Span", group = 'Ichimoku Settings')
+show_conversion = input.bool(false, "Show Conversion Line", group = 'Ichimoku Settings')
+show_lagging = input.bool(false, "Show Lagging Span", group = 'Ichimoku Settings')
+
+///////////////////////////////////////////////
+// ====== Keltner Channels Settings ======
+///////////////////////////////////////////////
+
+
+length = input.int(20, minval = 1, group = 'Keltner Settings')
+mult = input.float(1.0, 'Multiplier', group = 'Keltner Settings')
+src = input.source(close, title = 'Source', group = 'Keltner Settings')
+exp = input.bool(true, 'Use Exponential MA', group = 'Keltner Settings')
+BandsStyle = input.string('Average True Range', options = ['Average True Range', 'True Range', 'Range'], title = 'Bands Style', group = 'Keltner Settings')
+atrlength = input.int(10, 'ATR Length', group = 'Keltner Settings')
+
+
+///////////////////////////////////////////////
+// ====== Nadaraya-Watson Settings ======
+///////////////////////////////////////////////
+
+
+nw_src = input.source(close, 'NW Source', group = 'Nadaraya Settings')
+h = input.float(8., 'Lookback Window', minval = 3., group = 'Nadaraya Settings')
+r = input.float(8., 'Relative Weighting', step = 0.25, group = 'Nadaraya Settings')
+x_0 = input.int(25, 'Start Regression at Bar', group = 'Nadaraya Settings')
+showMiddle = input.bool(true, 'Show middle band', group = 'Nadaraya Settings')
+smoothColors = input.bool(false, 'Smooth Colors', group = 'Nadaraya Settings')
+lag = input.int(2, 'Lag', group = 'Nadaraya Settings')
+lenjeje = input.int(32, 'ATR Period', group = 'Nadaraya Settings')
+coef = input.float(2.7, 'Multiplier', group = 'Nadaraya Settings')
+
+
+///////////////////////////////////////////////
+// ====== Naked EMAs Settings ======
+///////////////////////////////////////////////
+
+
+n = input.int(title = 'Fractal Periods', defval = 2, minval = 2, group = 'EMAs Settings')
+
+
+///////////////////////////////////////////////
+// ====== Keltner Channels Calculation ======
+///////////////////////////////////////////////
+
+
+esma(source, length) =>
+    s = ta.sma(source, length)
+    e = ta.ema(source, length)
+    exp ? e : s
+
+ma = esma(src, length)
+rangema = BandsStyle == 'True Range' ? ta.tr(true) : BandsStyle == 'Average True Range' ? ta.atr(atrlength) : ta.rma(high - low, length)
+upper = ma + rangema * mult
+lower = ma - rangema * mult
+
+
+///////////////////////////////////////////////
+// ====== Nadaraya-Watson Calculation ======
+///////////////////////////////////////////////
+
+
+float y1 = 0.
+float y2 = 0.
+srcArray = array.new<float>(0)
+array.push(srcArray, nw_src)
+size = array.size(srcArray)
+
+kernel_regression1(_src, _size, _h) =>
+    float _currentWeight = 0.
+    float _cumulativeWeight = 0.
+    for i = 0 to _size + x_0 by 1
+        y = _src[i]
+        w = math.pow(1 + math.pow(i, 2) / (math.pow(_h, 2) * 2 * r), -r)
+        _currentWeight := _currentWeight + y * w
+        _cumulativeWeight := _cumulativeWeight + w
+        _cumulativeWeight
+    [_currentWeight, _cumulativeWeight]
+
+[currentWeight1, cumulativeWeight1] = kernel_regression1(nw_src, size, h)
+yhat1 = currentWeight1 / cumulativeWeight1
+[currentWeight2, cumulativeWeight2] = kernel_regression1(nw_src, size, h - lag)
+yhat2 = currentWeight2 / cumulativeWeight2
+
+
+///////////////////////////////////////////////
+// ====== Naked EMAs Calculation ======
+///////////////////////////////////////////////
+
+
+var float ema9_plot = na
+var float ema21_plot = na
+var float ema30_plot = na
+var float ema50_plot = na
+var float ema100_plot = na
+var float ema200_plot = na
+var float ma100_plot = na
+
+ema9 = ta.ema(close, 9)
+ema21 = ta.ema(close, 21)
+ema30 = ta.ema(close, 30)
+ema50 = ta.ema(close, 50)
+ema100 = ta.ema(close, 100)
+ema200 = ta.ema(close, 200)
+ma100 = ta.sma(close, 100)
+
+if show_emas
+    ema9_plot := ema9
+    ema21_plot := ema21
+    ema30_plot := ema30
+    ema50_plot := ema50
+    ema100_plot := ema100
+    ema200_plot := ema200
+    ma100_plot := ma100
+    ma100_plot
+else
+    ema9_plot := na
+    ema21_plot := na
+    ema30_plot := na
+    ema50_plot := na
+    ema100_plot := na
+    ema200_plot := na
+    ma100_plot := na
+    ma100_plot
+
+// Fractals calculation
+dnFractal = high[n - 2] < high[n] and high[n - 1] < high[n] and high[n + 1] < high[n] and high[n + 2] < high[n]
+upFractal = low[n - 2] > low[n] and low[n - 1] > low[n] and low[n + 1] > low[n] and low[n + 2] > low[n]
+// Nadaraya-Watson Colors
+bool isBullish = yhat1[1] < yhat1
+bool isBullishSmooth = yhat2 > yhat1
+c_bullish = input.color(#3AFF17, 'Bullish Color', group = 'Nadaraya Colors')
+c_bearish = input.color(#FD1707, 'Bearish Color', group = 'Nadaraya Colors')
+colorByCross = isBullishSmooth ? c_bullish : c_bearish
+colorByRate = isBullish ? c_bullish : c_bearish
+plotColor = smoothColors ? colorByCross : colorByRate
+
+// Nadaraya-Watson Bands
+upperjeje = yhat1 + coef * ta.atr(lenjeje)
+lowerjeje = yhat1 - coef * ta.atr(lenjeje)
+
+
+///////////////////////////////////////////////
+// ====== Additional Calculations ======
+///////////////////////////////////////////////
+
+// Ichimoku Cloud Calculations
+donchian(len) => math.avg(ta.lowest(len), ta.highest(len))
+conversionLine = donchian(conversionPeriods)
+baseLine = donchian(basePeriods)
+leadLine1 = math.avg(conversionLine, baseLine)
+leadLine2 = donchian(laggingSpan2Periods)
+
+
+///////////////////////////////////////////////
+// ======Global Scope Plotting ======
+///////////////////////////////////////////////
+
+
+// Ichimoku Cloud Plotting
+var float ic_conversion = na
+var float ic_base = na
+var float ic_lagging = na
+var float ic_lead1 = na
+var float ic_lead2 = na
+
+if show_ichimoku
+    ic_conversion := show_conversion ? conversionLine : na
+    ic_base := baseLine
+    ic_lagging := show_lagging ? close : na
+    ic_lead1 := leadLine1
+    ic_lead2 := leadLine2
+
+plot(ic_conversion, color=#2962FF, title="Conversion Line")
+plot(ic_base, color=#B71C1C, title="Base Line")
+plot(ic_lagging, offset = -displacement + 1, color=#43A047, title="Lagging Span")
+p1 = plot(ic_lead1, offset = displacement - 1, color=#A5D6A7, title="Leading Span A")
+p2 = plot(ic_lead2, offset = displacement - 1, color=#EF9A9A, title="Leading Span B")
+fill(p1, p2, color = leadLine1 > leadLine2 ? color.rgb(67, 160, 71, 90) : color.rgb(244, 67, 54, 90))
+
+
+// Keltner Channels
+var float kc_upper = na
+var float kc_lower = na
+var float kc_middle = na
+
+if show_keltner
+    kc_upper := upper
+    kc_lower := lower
+    kc_middle := ma
+    kc_middle
+else
+    kc_upper := na
+    kc_lower := na
+    kc_middle := na
+    kc_middle
+
+u1 = plot(kc_upper, color = #2962FF, title = 'KC Upper')
+plot(kc_middle, color = #2962FF, title = 'KC Basis')
+l1 = plot(kc_lower, color = #2962FF, title = 'KC Lower')
+fill(u1, l1, color = color.rgb(243, 177, 33, 49), title = 'KC Background')
+
+// Nadaraya-Watson
+var float nw_middle = na
+var float nw_upper = na
+var float nw_lower = na
+
+if show_nadaraya
+    nw_middle := showMiddle ? yhat1 : na
+    nw_upper := upperjeje
+    nw_lower := lowerjeje
+    nw_lower
+else
+    nw_middle := na
+    nw_upper := na
+    nw_lower := na
+    nw_lower
+
+plot(nw_middle, 'NW Middle', color = plotColor, linewidth = 2)
+plot(nw_upper, 'NW Upper', color = color.rgb(0, 247, 8), linewidth = 2)
+plot(nw_lower, 'NW Lower', color = color.rgb(255, 0, 0), linewidth = 2)
+
+// Naked EMAs Plotting (in global scope)
+plot(ema9_plot, color = color.white, linewidth = 1, title = 'EMA9', style = plot.style_stepline)
+plot(ema21_plot, color = color.fuchsia, linewidth = 1, title = 'EMA21', style = plot.style_cross)
+plot(ema30_plot, color = color.navy, linewidth = 1, title = 'EMA30', style = plot.style_cross)
+plot(ema50_plot, color = color.orange, linewidth = 1, title = 'EMA50', style = plot.style_circles)
+plot(ema100_plot, color = color.aqua, linewidth = 1, title = 'EMA100')
+plot(ema200_plot, color = color.red, linewidth = 1, title = 'EMA200')
+plot(ma100_plot, color = color.yellow, linewidth = 1, title = 'MA100')
+
+// Fractal Plotting
+plotshape(show_emas and dnFractal ? high : na, style = shape.triangledown, location = location.abovebar, offset = -2, color = color.red)
+plotshape(show_emas and upFractal ? low : na, style = shape.triangleup, location = location.belowbar, offset = -2, color = color.green)
+
+// Plot characters for crossovers
+plotchar(show_nadaraya and ta.crossover(close, upperjeje), char = 'S', location = location.abovebar, size = size.tiny)
+plotchar(show_nadaraya and ta.crossunder(close, lowerjeje), char = 'B', location = location.belowbar, size = size.tiny)
+
+
+///////////////////////////////////////////////
+// ====== Alerts ======
+///////////////////////////////////////////////
+
+
+
+// Nadaraya-Watson Color Changes
+alertcondition(smoothColors ? ta.crossunder(yhat2, yhat1) : yhat1[1] > yhat1 and yhat1[2] < yhat1[1], title = 'Bearish Color Change', message = 'Nadaraya-Watson: {{ticker}} ({{interval}}) turned Bearish ▼')
+alertcondition(smoothColors ? ta.crossover(yhat2, yhat1) : yhat1[1] < yhat1 and yhat1[2] > yhat1[1], title = 'Bullish Color Change', message = 'Nadaraya-Watson: {{ticker}} ({{interval}}) turned Bullish ▲')
+
+// Band Crossing Alerts
+alertcondition(ta.crossunder(close, lowerjeje), title = 'Price close under lower band', message = 'Nadaraya-Watson: {{ticker}} ({{interval}}) crossed under lower band 🍀')
+alertcondition(ta.crossover(close, upperjeje), title = 'Price close above upper band', message = 'Nadaraya-Watson: {{ticker}} ({{interval}}) Crossed above upper band 🥀')

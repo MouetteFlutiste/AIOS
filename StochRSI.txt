@@ -1,0 +1,341 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// SmallWorld - We soorfin high !
+
+//@version=5
+indicator ('Stochastic+RSI', overlay = false)
+
+///////////////////////////////////////////////////////////////////////////////
+// RSI
+len      = input.int(14, minval=1, title="RSI Length")
+ob       = input.int(70, title="Overbought", minval=50, maxval=100)
+os       = input.int(30, title="Oversold", minval=0, maxval=50)
+ob_color = color.new(color.aqua, 40)
+os_color = color.new(color.purple, 40)
+h_color  = color.new(color.gray, 40)
+
+rsi = ta.rsi(close, len)
+obLine1 = hline(ob, title="Overbought", color=ob_color, linestyle=hline.style_dashed)
+osLine1 = hline(os, title="Oversold", color=os_color, linestyle=hline.style_dashed)
+obLine2 = hline(80, color=ob_color, linestyle=hline.style_dotted)
+osLine2 = hline(20, color=os_color, linestyle=hline.style_dotted)
+fill(obLine1, obLine2, color=color.new(color.aqua, 95))
+fill(osLine1, osLine2, color=color.new(color.purple, 95))
+midline = hline(50, color=h_color, linestyle=hline.style_dotted)
+band1   = hline(100, color=h_color, linestyle=hline.style_dotted)
+band2   = hline(0, color=h_color, linestyle=hline.style_dotted)
+
+plot(rsi, title="RSI", color=(rsi > ob or rsi < os ? color.new(#f29999, 0) : color.new(color.silver, 0)), linewidth=2)
+
+///////////////////////////////////////////////////////////////////////////////
+// DIVS
+plotHidden = input.bool(true, title="Show Hidden", group="Divergences")
+lbR        = input.int(4, title="Pivot Right", minval=1, group="Divergences")
+lbL        = input.int(4, title="Pivot Left", minval=1, group="Divergences")
+rangeUpper = input.int(50, title="Range Max", minval=1, group="Divergences")
+rangeLower = input.int(1, title="Range Min", minval=1, group="Divergences")
+// control if divs are calculated based on 'Close' or 'Wick' or 'Close or Wicks' (both)
+wicks     = input.string("Close or Wicks", title="Close/Wicks", options=["Close", "Wicks","Close or Wicks"], group = "Divergences")
+closeLow  = (wicks == "Wicks") ? low[lbR] : close[lbR]
+closeHigh = (wicks == "Wicks") ? high[lbR] : close[lbR]
+
+plFound = na(ta.pivotlow(rsi, lbL, lbR)) ? false : true
+phFound = na(ta.pivothigh(rsi, lbL, lbR)) ? false : true
+
+_inRange(cond) =>
+    bars = ta.barssince(cond == true)
+    rangeLower <= bars and bars <= rangeUpper
+
+bearColor = color.new(color.red, 10)
+bullColor = color.new(color.green, 10)
+hiddenBullColor = color.new(color.aqua, 10)
+hiddenBearColor = color.new(color.fuchsia, 10)
+textColor = color.white
+
+//------------------------------------------------------------------------------
+// Regular Bullish
+
+// Osc: Higher Low
+oscHL = rsi[lbR] > ta.valuewhen(plFound, rsi[lbR], 1) and _inRange(plFound[1])
+
+// Price: Lower Low
+priceLL = closeLow < ta.valuewhen(plFound, closeLow, 1)
+if(wicks == "Close or Wicks")
+    priceLL := low[lbR] < ta.valuewhen(plFound, low[lbR], 1) or close[lbR] < ta.valuewhen(plFound, close[lbR], 1)
+
+bullCond = priceLL and oscHL and plFound
+
+plot(
+	 plFound ? rsi[lbR] : na,
+	 offset=-lbR,
+	 title="Regular Bullish",
+	 linewidth=2,
+	 color=(bullCond ? bullColor : na)
+	 )
+
+plotshape(
+	 bullCond ? rsi[lbR] : na,
+	 offset=-lbR,
+	 title="Regular Bullish Label",
+	 style=shape.labelup,
+	 location=location.absolute,
+	 color=bullColor,
+	 size=size.tiny
+	 )
+
+//------------------------------------------------------------------------------
+// Hidden Bullish
+
+// Osc: Lower Low
+oscLL = rsi[lbR] < ta.valuewhen(plFound, rsi[lbR], 1) and _inRange(plFound[1])
+
+// Price: Higher Low
+priceHL = closeLow > ta.valuewhen(plFound, closeLow, 1)
+if(wicks == "Close or Wicks")
+    priceHL := low[lbR] > ta.valuewhen(plFound, low[lbR], 1) or close[lbR] > ta.valuewhen(plFound, close[lbR], 1)
+
+hiddenBullCond = plotHidden and priceHL and oscLL and plFound
+
+plot(
+	 plFound ? rsi[lbR] : na,
+	 offset=-lbR,
+	 title="Hidden Bullish",
+	 linewidth=2,
+	 color=(hiddenBullCond ? hiddenBullColor : na)
+	 )
+
+plotshape(
+	 hiddenBullCond ? rsi[lbR] : na,
+	 offset=-lbR,
+	 title="Hidden Bullish Label",
+	 style=shape.labelup,
+	 location=location.absolute,
+	 color=hiddenBullColor,
+	 size=size.tiny
+	 )
+
+//------------------------------------------------------------------------------
+// Regular Bearish
+
+// Osc: Lower High
+oscLH = rsi[lbR] < ta.valuewhen(phFound, rsi[lbR], 1) and _inRange(phFound[1])
+
+// Price: Higher High
+priceHH = closeHigh > ta.valuewhen(phFound, closeHigh, 1)
+if(wicks == "Close or Wicks")
+    priceHH := high[lbR] > ta.valuewhen(phFound, high[lbR], 1) or close[lbR] > ta.valuewhen(phFound, close[lbR], 1)
+
+bearCond = priceHH and oscLH and phFound
+
+plot(
+	 phFound ? rsi[lbR] : na,
+	 offset=-lbR,
+	 title="Regular Bearish",
+	 linewidth=2,
+	 color=(bearCond ? bearColor : na)
+	 )
+
+plotshape(
+	 bearCond ? rsi[lbR] : na,
+	 offset=-lbR,
+	 title="Regular Bearish Label",
+	 style=shape.labeldown,
+	 location=location.absolute,
+	 color=bearColor,
+	 size=size.tiny
+	 )
+
+//------------------------------------------------------------------------------
+// Hidden Bearish
+
+// Osc: Higher High
+oscHH = rsi[lbR] > ta.valuewhen(phFound, rsi[lbR], 1) and _inRange(phFound[1])
+
+// Price: Lower High
+priceLH = closeHigh < ta.valuewhen(phFound, closeHigh, 1)
+if(wicks == "Close or Wicks")
+    priceLH := high[lbR] < ta.valuewhen(phFound, high[lbR], 1) or close[lbR] < ta.valuewhen(phFound, close[lbR], 1)
+
+hiddenBearCond = plotHidden and priceLH and oscHH and phFound
+
+plot(
+	 phFound ? rsi[lbR] : na,
+	 offset=-lbR,
+	 title="Hidden Bearish",
+	 linewidth=2,
+	 color=(hiddenBearCond ? hiddenBearColor : na)
+	 )
+
+plotshape(
+	 hiddenBearCond ? rsi[lbR] : na,
+	 offset=-lbR,
+	 title="Hidden Bearish Label",
+	 style=shape.labeldown,
+	 location=location.absolute,
+	 color=hiddenBearColor,
+	 size=size.tiny
+	 )
+
+//------------------------------------------------------------------------------
+// Pivots
+pivhigh = ta.pivothigh(rsi, math.max(lbR, 5), lbR)
+pivlow  = ta.pivotlow(rsi, math.max(lbR, 5), lbR)
+pivCond = bullCond or hiddenBullCond or bearCond or hiddenBearCond
+
+plotshape(
+	 pivCond ? na : pivhigh+2,
+	 offset=-lbR,
+	 title="Pivot High",
+	 style=shape.triangledown,
+	 location=location.absolute,
+	 color=color.silver,
+	 size=size.tiny
+	 )
+
+plotshape(
+	 pivCond ? na : pivlow-2,
+	 offset=-lbR,
+	 title="Pivot Low",
+	 style=shape.triangleup,
+	 location=location.absolute,
+	 color=color.silver,
+	 size=size.tiny
+	 )
+
+//------------------------------------------------------------------------------
+// Alerts
+alertcondition(bullCond, title="Bull", message="Regular Bull Div {{ticker}} XXmin")
+alertcondition(bearCond, title="Bear", message="Regular Bear Div {{ticker}} XXmin")
+alertcondition(hiddenBullCond, title="H Bull", message="Hidden Bull Div {{ticker}} XXmin")
+alertcondition(hiddenBearCond, title="H Bear", message="Hidden Bear Div {{ticker}} XXmin")
+
+///////////////////////////////////////////////////////////////////////////////
+//Stoch RSI
+showsrsi = input.bool(true, title="Show Stoch RSI", group="Stochastic RSI")
+smoothK  = input.int(3, minval=1, group="Stochastic RSI")
+smoothD  = input.int(3, minval=1, group="Stochastic RSI")
+lenStoch = input.int(14, minval=1, group="Stochastic RSI")
+
+k = ta.sma(ta.stoch(rsi, rsi, rsi, lenStoch), smoothK)
+d = ta.sma(k, smoothD)
+
+plot(showsrsi ? k : na, title="K", color=color.new(color.blue, 30), linewidth=2)
+plot(showsrsi ? d : na, title="D", color=color.new(color.purple, 30), linewidth=2)
+
+///////////////////////////////////////////////////////////////////////////////
+// Reverse Stoch
+showresrsi = input.bool(true, title="Show Reverse Stoch RSI", group="Reverse Stochastic")
+Klen       = input.int(14, "K", minval = 2, group="Reverse Stochastic")
+D          = input.int(3, "D", minval = 1, group="Reverse Stochastic")
+E          = input.string("Forecasted KD", title="KD Estimation", options=["Current Dynamic KD", "Current Static KD","Forecasted KD"], group="Reverse Stochastic")
+smooth     = input.int(3, "Smooth", minval = 1, group="Reverse Stochastic")
+sm         = input.bool(true,  "Stoch Cross Smoothing", group="Reverse Stochastic")
+slen       = input.int(3, "  Smoothing Length", group="Reverse Stochastic")
+dec        = input.int(3, "Decimals", minval = 0,  maxval = 10, group="Reverse Stochastic")
+
+
+ss(Series, Period) => // Super Smoother Function
+    // period = input(8, "Super Smoother Period", input.float, minval=2.0, step=0.5)
+    var PI    = 2.0 * math.asin(1.0)
+    var SQRT2 = math.sqrt(2.0)
+    lambda = PI * SQRT2 / Period
+    a1     = math.exp(-lambda)
+    coeff2 = 2.0 * a1 * math.cos(lambda)
+    coeff3 = - math.pow(a1, 2.0)
+    coeff1 = 1.0 - coeff2 - coeff3
+    filt1  = 0.0
+    filt1 := coeff1 * (Series + nz(Series[1])) * 0.5 + coeff2 * nz(filt1[1]) + coeff3 * nz(filt1[2])
+    filt1
+
+Round( _val, _decimals) => 
+    // Rounds _val to _decimals places.
+    _p = math.pow(10,_decimals)
+    math.round(math.abs(_val)*_p)/_p*math.sign(_val)
+
+x  = ta.stoch(close,high,low,Klen)*0.01
+x2 = ta.sma(x,smooth)
+x3 = ta.sma(x2,D)
+
+C(level, len, smooth) =>
+    if smooth == 1
+        C = (ta.highest(high,len) - ta.lowest(low,len))*level + ta.lowest(low,len)
+    else    
+        sum = 0.0
+        for i = 1 to smooth -1
+            sum := x[i] + sum
+        a = smooth*level - sum
+        C = a * (ta.highest(high,len) - ta.lowest(low,len)) + ta.lowest(low,len)
+
+C2(len, smooth) =>
+    float sumK  = 0
+    for i = 1 to smooth-1
+        sumK := sumK + x[i]
+    float sumKS = 0
+    for i = 1 to D-1
+        sumKS := sumKS + x2[i]
+    C2 = ((((sumKS*smooth)+sumK-(sumK*D))*(ta.highest(high,len)-ta.lowest(low,len)))/((D-1)))+ta.lowest(low,len)
+
+Cf(level, len, smooth) =>
+    if smooth == 1
+        Cf = (ta.highest(high,len) - ta.lowest(low,len))*level + ta.lowest(low,len)
+    else    
+        sum = 0.0
+        for i = 0 to smooth -2
+            sum := x[i] + sum
+        a = smooth*level - sum
+        Cf = a * (ta.highest(high,len-1) - ta.lowest(low,len-1)) + ta.lowest(low,len-1)
+
+stp(len) => 
+    (close - ta.lowest(low,len-1))/(ta.highest(high,len-1) - ta.lowest(low,len-1))
+
+kk = ta.stoch(close, high, low, len)*0.01
+
+X = stp(len)
+xk = 100* ta.sma(kk,smooth)
+
+k1(len)=>
+    sum = 0.0
+    for i = 0 to len - 2
+        sum := kk[i] +  sum
+        mean = (sum + X) /len
+
+X2 = 100*k1(smooth)
+
+d1(len)=>
+    sum = 0.0
+    for i = 0 to len - 2
+        sum := xk[i] + sum
+    mean = (sum + X2)/len
+
+x3p = d1(D)*0.01
+
+ccks  = ss(C(x3,Klen,smooth),slen)
+cck   = C(x3,Klen,smooth)
+ccks2 = ss(C2(Klen,smooth),slen)
+cck2  = C2(Klen,smooth)
+cfks  = ss(Cf(x3p,Klen,smooth),slen)
+cfk   = Cf(x3p,Klen,smooth)
+
+
+float Cross = na
+if (E == "Current Dynamic KD") // Close one day ago
+    Cross := sm? ccks : cck
+if (E == "Current Static KD")
+    Cross := sm ? ccks2 : cck2
+if (E == "Forecasted KD")
+    Cross := sm ? cfks : cfk
+
+
+PnL_Label = label.new(
+	 showresrsi ? bar_index + 5 : na,
+	 50,
+	 text=("Crossing " + (x3 > x2 ? "UP" : "DOWN") + ": " + str.tostring(Round(Cross,dec))),
+	 color=color.new(#000000, 50),
+	 textcolor=color.white,
+	 style=label.style_label_left,
+	 yloc=yloc.price,
+	 xloc=xloc.bar_index,
+	 size=size.normal
+	 )
+label.delete(PnL_Label[1])
+
+///////////////////////////////////////////////////////////////////////////////
